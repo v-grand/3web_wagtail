@@ -30,7 +30,23 @@ services:
       - .env
     depends_on:
       - db
-    command: bash -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    command: >
+      bash -c "
+      if [ ! -d '/app/mysite' ]; then
+        echo 'Creating Wagtail project...' &&
+        wagtail start mysite &&
+        cd mysite &&
+        pip install -r requirements.txt &&
+        sed -i 's/django.db.backends.sqlite3/django.db.backends.postgresql/g' mysite/settings/base.py &&
+        sed -i \"s/'NAME': BASE_DIR \/ 'db.sqlite3',/'NAME': 'wagtail', 'USER': 'wagtail', 'PASSWORD': '$$POSTGRES_PASSWORD', 'HOST': 'db', 'PORT': '5432',/g\" mysite/settings/base.py &&
+        python manage.py migrate &&
+        echo 'Project created! Create superuser:' &&
+        echo 'docker-compose -f docker-compose.dev.yml exec web bash' &&
+        echo 'cd mysite && python manage.py createsuperuser';
+      fi &&
+      cd mysite &&
+      python manage.py runserver 0.0.0.0:8000
+      "
     stdin_open: true
     tty: true
 

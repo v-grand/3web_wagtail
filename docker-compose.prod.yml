@@ -36,9 +36,15 @@ services:
         condition: service_healthy
     command: >
       bash -c "
-      python manage.py collectstatic --noinput &&
+      echo 'Creating Wagtail project...' &&
+      wagtail start mysite /tmp/mysite &&
+      cd /tmp/mysite &&
+      pip install -r requirements.txt &&
+      sed -i 's/django.db.backends.sqlite3/django.db.backends.postgresql/g' mysite/settings/base.py &&
+      sed -i \"s/'NAME': BASE_DIR \/ 'db.sqlite3',/'NAME': 'wagtail', 'USER': 'wagtail', 'PASSWORD': '$$POSTGRES_PASSWORD', 'HOST': 'db', 'PORT': '5432',/g\" mysite/settings/base.py &&
       python manage.py migrate &&
-      gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 wagtail.test.wsgi:application
+      python manage.py collectstatic --noinput &&
+      gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 mysite.wsgi:application
       "
     restart: unless-stopped
 
