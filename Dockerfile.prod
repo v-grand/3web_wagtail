@@ -1,0 +1,42 @@
+# Production Dockerfile for Wagtail
+FROM python:3.12-slim-bookworm
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=8000
+
+# Install system packages
+RUN apt-get update --yes --quiet && apt-get install --yes --quiet --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    libjpeg62-turbo-dev \
+    zlib1g-dev \
+    libwebp-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /tmp
+
+# Install Wagtail and dependencies
+RUN pip install --upgrade pip && \
+    pip install wagtail gunicorn psycopg2-binary
+
+# Create a new Wagtail project
+RUN wagtail start mysite /tmp/mysite
+
+# Configure for PostgreSQL
+WORKDIR /tmp/mysite
+RUN sed -i "s/'django.db.backends.sqlite3'/'django.db.backends.postgresql'/g" mysite/settings/base.py && \
+    sed -i "s/'NAME': BASE_DIR \/ 'db.sqlite3',/'NAME': os.environ.get('POSTGRES_DB', 'wagtail'),\n        'USER': os.environ.get('POSTGRES_USER', 'wagtail'),\n        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'wagtail'),\n        'HOST': os.environ.get('POSTGRES_HOST', 'db'),\n        'PORT': os.environ.get('POSTGRES_PORT', '5432'),/g" mysite/settings/base.py && \
+    echo "\nimport os" >> mysite/settings/base.py && \
+    echo "ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost').split(',') if os.environ.get('ALLOWED_HOSTS') else ['*']" >> mysite/settings/base.py && \
+    echo "DEBUG = os.environ.get('DEBUG', 'False') == 'True'" >> mysite/settings/base.py && \
+    echo "SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default-key-change-this')" >> mysite/settings/base.py && \
+    echo "STATIC_ROOT = '/tmp/mysite/static'" >> mysite/settings/base.py
+
+# Expose port
+EXPOSE 8000
+
+# Default command
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "mysite.wsgi:application"]

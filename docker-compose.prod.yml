@@ -4,14 +4,16 @@ services:
   db:
     image: postgres:15-alpine
     container_name: wagtail_db
-    env_file:
-      - .env
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-wagtail}
+      - POSTGRES_USER=${POSTGRES_USER:-wagtail}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-wagtail}
     ports:
-      - "127.0.0.1:5432:5432"  # Только локальный доступ
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wagtail"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wagtail}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -20,35 +22,27 @@ services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.prod
     container_name: wagtail_web
     ports:
       - "8000:8000"
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - static_volume:/app/static
-      - media_volume:/app/media
-    env_file:
-      - .env
+    environment:
+      - DEBUG=${DEBUG:-False}
+      - SECRET_KEY=${SECRET_KEY}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-wagtail}:${POSTGRES_PASSWORD:-wagtail}@db:5432/${POSTGRES_DB:-wagtail}
     depends_on:
       db:
         condition: service_healthy
     command: >
       bash -c "
-      echo 'Creating Wagtail project...' &&
-      wagtail start mysite /tmp/mysite &&
       cd /tmp/mysite &&
-      pip install -r requirements.txt &&
-      sed -i 's/django.db.backends.sqlite3/django.db.backends.postgresql/g' mysite/settings/base.py &&
-      sed -i \"s/'NAME': BASE_DIR \/ 'db.sqlite3',/'NAME': 'wagtail', 'USER': 'wagtail', 'PASSWORD': '$$POSTGRES_PASSWORD', 'HOST': 'db', 'PORT': '5432',/g\" mysite/settings/base.py &&
-      python manage.py migrate &&
+      python manage.py migrate --noinput &&
       python manage.py collectstatic --noinput &&
-      gunicorn --bind 0.0.0.0:8000 --workers 4 --timeout 120 mysite.wsgi:application
+      echo 'from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.filter(username=\"admin\").exists() or User.objects.create_superuser(\"admin\", \"admin@example.com\", \"changeme123\")' | python manage.py shell &&
+      gunicorn --bind 0.0.0.0:8000 --workers 3 --timeout 120 --access-logfile - --error-logfile - mysite.wsgi:application
       "
     restart: unless-stopped
 
 volumes:
   postgres_data:
-  static_volume:
-  media_volume:
