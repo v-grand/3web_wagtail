@@ -1,25 +1,6 @@
 version: '3.8'
 
 services:
-  wagtail:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: wagtail_dev
-    ports:
-      - "8000:8000"
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - /app/venv
-    env_file:
-      - .env
-    depends_on:
-      - db
-    command: python runtests.py
-    stdin_open: true
-    tty: true
-
   db:
     image: postgres:15-alpine
     container_name: wagtail_db
@@ -34,6 +15,24 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wagtail_web
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    env_file:
+      - .env
+    depends_on:
+      - db
+    command: bash -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    stdin_open: true
+    tty: true
 
   frontend:
     build:
