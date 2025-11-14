@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  wagtail:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wagtail_dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/venv
+    environment:
+      - DJANGO_SETTINGS_MODULE=wagtail.test.settings
+      - PYTHONUNBUFFERED=1
+    command: python runtests.py
+    stdin_open: true
+    tty: true
+
+  db:
+    image: postgres:15-alpine
+    container_name: wagtail_db
+    environment:
+      - POSTGRES_DB=wagtail
+      - POSTGRES_USER=wagtail
+      - POSTGRES_PASSWORD=wagtail
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wagtail_frontend
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm start
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
